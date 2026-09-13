@@ -12,7 +12,7 @@ services:
     ports:
       - "3000:80"
     networks:
-      - llm_analyzer_network
+      - analyzer_network
 
 networks:
   llm_analyzer_network:
