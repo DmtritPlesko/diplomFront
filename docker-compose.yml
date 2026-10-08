@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: /api                    # ← относительный
+        VITE_API_URL: /api
     container_name: analyzer_frontend
     restart: unless-stopped
     ports:
@@ -15,5 +13,5 @@ services:
       - analyzer_network
 
 networks:
-  llm_analyzer_network:
+  analyzer_network:
     external: true
