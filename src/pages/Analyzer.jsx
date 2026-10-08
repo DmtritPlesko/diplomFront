@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import apiClient from '../api/client'
+import { performLocalAnalysis, tokenizeWithHighlights } from '../utils/analyzer'
 import './Analyzer.css'
 
 const Analyzer = () => {
@@ -30,95 +31,25 @@ const Analyzer = () => {
     }
   }
 
-  // Локальный анализатор (если бэк недоступен)
-  const performLocalAnalysis = (inputText) => {
-    const lowerText = inputText.toLowerCase()
-    const patterns = [
-      { word: 'ненависть', weight: 10 },
-      { word: 'убить', weight: 10 },
-      { word: 'смерть', weight: 8 },
-      { word: 'насилие', weight: 9 },
-      { word: 'уничтожить', weight: 8 },
-      { word: 'война', weight: 7 },
-      { word: 'агрессия', weight: 7 },
-      { word: 'террор', weight: 10 },
-      { word: 'экстремизм', weight: 10 },
-      { word: 'фашизм', weight: 9 },
-      { word: 'нацизм', weight: 9 },
-      { word: 'расизм', weight: 8 },
-      { word: 'ксенофобия', weight: 8 },
-      { word: 'угроза', weight: 6 },
-      { word: 'деструктивный', weight: 8 },
-      { word: 'пропаганда', weight: 7 },
-    ]
-
-    let totalWeight = 0
-    const foundWords = []
-
-    patterns.forEach(p => {
-      if (lowerText.includes(p.word)) {
-        totalWeight += p.weight
-        foundWords.push(p.word)
-      }
-    })
-
-    const score = Math.min(Math.round((totalWeight / 100) * 100), 100)
-
-    let level = 'Безопасно'
-    let color = '#10b981'
-    let recommendation = 'Текст не содержит деструктивных элементов'
-
-    if (score > 70) {
-      level = 'Критический'
-      color = '#ef4444'
-      recommendation = 'Текст содержит явные деструктивные элементы. Рекомендуется дополнительная проверка.'
-    } else if (score > 40) {
-      level = 'Высокий'
-      color = '#f97316'
-      recommendation = 'Текст содержит потенциально опасные элементы.'
-    } else if (score > 20) {
-      level = 'Средний'
-      color = '#eab308'
-      recommendation = 'Текст содержит отдельные деструктивные элементы.'
-    } else if (score > 0) {
-      level = 'Низкий'
-      color = '#84cc16'
-      recommendation = 'Текст содержит минимальные деструктивные элементы.'
-    }
-
-    return {
-      score,
-      level,
-      color,
-      recommendation,
-      foundWords: foundWords.length > 0 ? foundWords : [],
-      wordCount: inputText.split(/\s+/).filter(w => w.length > 0).length,
-      charCount: inputText.length,
-    }
-  }
-
-  const highlightText = (inputText, words) => {
-    if (!words || words.length === 0) return inputText
-
-    let highlighted = inputText
-    const sorted = [...words].sort((a, b) => b.length - a.length)
-
-    sorted.forEach(word => {
-      const regex = new RegExp(`(${word})`, 'gi')
-      highlighted = highlighted.replace(regex, '<mark class="danger-word">$1</mark>')
-    })
-    return highlighted
-  }
-
   const clearAnalysis = () => {
     setText('')
     setResult(null)
     setError('')
   }
 
-  const getHighlightedText = () => {
-    if (!result || !result.foundWords) return text
-    return highlightText(text, result.foundWords)
+  // Безопасный рендер подсвеченного текста через массив токенов
+  const renderHighlightedText = () => {
+    if (!result?.foundWords?.length) return text
+    const tokens = tokenizeWithHighlights(text, result.foundWords)
+    return tokens.map((token, i) =>
+      token.isDanger ? (
+        <mark key={i} className="danger-word">
+          {token.text}
+        </mark>
+      ) : (
+        <span key={i}>{token.text}</span>
+      )
+    )
   }
 
   return (
@@ -150,7 +81,9 @@ const Analyzer = () => {
             </div>
             <div className="card-meta">
               <span>{text.length} символов</span>
-              <span>{text.split(/\s+/).filter(w => w.length > 0).length} слов</span>
+              <span>
+                {text.split(/\s+/).filter((w) => w.length > 0).length} слов
+              </span>
             </div>
           </div>
 
@@ -203,15 +136,13 @@ const Analyzer = () => {
         {result && (
           <section className="result-container">
             {/* Score Card */}
-            <div className="score-card" style={{ '--accent-color': result.color }}>
+            <div
+              className="score-card"
+              style={{ '--accent-color': result.color }}
+            >
               <div className="score-visual">
                 <svg className="score-ring" viewBox="0 0 200 200">
-                  <circle
-                    cx="100"
-                    cy="100"
-                    r="85"
-                    className="ring-bg"
-                  />
+                  <circle cx="100" cy="100" r="85" className="ring-bg" />
                   <circle
                     cx="100"
                     cy="100"
@@ -219,7 +150,9 @@ const Analyzer = () => {
                     className="ring-progress"
                     style={{
                       strokeDasharray: `${2 * Math.PI * 85}`,
-                      strokeDashoffset: `${2 * Math.PI * 85 * (1 - result.score / 100)}`,
+                      strokeDashoffset: `${
+                        2 * Math.PI * 85 * (1 - result.score / 100)
+                      }`,
                       stroke: result.color,
                     }}
                   />
@@ -233,7 +166,10 @@ const Analyzer = () => {
               </div>
 
               <div className="score-info">
-                <div className="risk-level" style={{ backgroundColor: result.color }}>
+                <div
+                  className="risk-level"
+                  style={{ backgroundColor: result.color }}
+                >
                   {result.level}
                 </div>
                 <h3>Результат анализа</h3>
@@ -249,7 +185,9 @@ const Analyzer = () => {
                     <div className="stat-label">символов</div>
                   </div>
                   <div className="stat">
-                    <div className="stat-value">{result.foundWords?.length || 0}</div>
+                    <div className="stat-value">
+                      {result.foundWords?.length || 0}
+                    </div>
                     <div className="stat-label">найдено</div>
                   </div>
                 </div>
@@ -260,7 +198,9 @@ const Analyzer = () => {
             <div className="progress-card">
               <div className="progress-header">
                 <span>Шкала риска</span>
-                <span style={{ color: result.color, fontWeight: 700 }}>{result.score}%</span>
+                <span style={{ color: result.color, fontWeight: 700 }}>
+                  {result.score}%
+                </span>
               </div>
               <div className="progress-track">
                 <div
@@ -277,6 +217,30 @@ const Analyzer = () => {
                 <span>🚨 Критично</span>
               </div>
             </div>
+
+            {/* Categories */}
+            {result.categories?.length > 0 && (
+              <div className="found-card">
+                <h3>
+                  <span>📊</span> Категории угроз
+                </h3>
+                <div className="found-words">
+                  {result.categories.map((cat) => (
+                    <span
+                      key={cat.key}
+                      className="word-chip"
+                      style={{
+                        background: `${cat.color}22`,
+                        color: cat.color,
+                        borderColor: `${cat.color}55`,
+                      }}
+                    >
+                      {cat.label} · {cat.count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Found Words */}
             {result.foundWords?.length > 0 && (
@@ -300,10 +264,9 @@ const Analyzer = () => {
                 <h3>
                   <span>📌</span> Текст с подсветкой
                 </h3>
-                <div
-                  className="highlighted-content"
-                  dangerouslySetInnerHTML={{ __html: getHighlightedText() }}
-                />
+                <div className="highlighted-content">
+                  {renderHighlightedText()}
+                </div>
               </div>
             )}
           </section>
